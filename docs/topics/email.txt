@@ -34,6 +34,25 @@ set, are used to authenticate to the SMTP server, and the
     The character set of email sent with ``django.core.mail`` will be set to
     the value of your :setting:`DEFAULT_CHARSET` setting.
 
+Using templates for email
+=========================
+
+Alternatively, if you want to use templates for your email subject and body
+text you can use the :func:`~django.shortcuts.send_templated_mail` shortcut::
+
+    from django.shortcuts import send_templated_mail
+
+    send_templated_mail('emails/email.txt', 'from@example.com',
+        ['to@example.com'], fail_silently=False)
+
+``emails/email.txt``::
+
+    {% block subject %}Subject here{% endblock %}
+
+    {% block plain %}
+    Here is the message.
+    {% endblock %}
+
 send_mail()
 ===========
 
