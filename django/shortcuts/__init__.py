@@ -4,12 +4,13 @@ of MVC. In other words, these functions/classes introduce controlled coupling
 for convenience's sake.
 """
 
-from django.template import loader, RequestContext
+from django.template import loader, loader_tags, Context, RequestContext
 from django.http import HttpResponse, Http404
 from django.http import HttpResponseRedirect, HttpResponsePermanentRedirect
 from django.db.models.manager import Manager
 from django.db.models.query import QuerySet
-from django.core import urlresolvers
+from django.core import urlresolvers, mail
+from django.utils.html import strip_tags
 
 def render_to_response(*args, **kwargs):
     """
@@ -128,3 +129,156 @@ def get_list_or_404(klass, *args, **kwargs):
         raise Http404('No %s matches the given query.' % queryset.model._meta.object_name)
     return obj_list
 
+
+def _get_block_node(template, name):
+    """
+    Get a named BlockNode from a template.
+    Returns `None` if a node with the given name does not exist.
+    """
+    for node in template.nodelist.get_nodes_by_type(loader_tags.BlockNode):
+        if node.name == name:
+            return node
+    return None
+
+
+def _render_block_node(template, name, context):
+    """
+    Shortcut to render a named node from a template, using the given context.
+    Returns `None` if a node with the given name does not exist.
+
+    Note that leading and trailing whitespace is stripped from the output.
+    """
+    node = _get_block_node(template, name)
+    if node is None:
+        return None
+    return node.render(context).strip()
+
+
+def _create_message(subject, plain, html,
+                    from_email, recipient_list,
+                    cc=None, bcc=None, files=None, **kwargs):
+    """
+    Return an EmailMessage instance, containing either a plaintext
+    representation, or a multipart html/plaintext representation.
+    """
+    if html:
+        message = mail.EmailMultiAlternatives(
+            subject or '',
+            plain or '',
+            from_email,
+            recipient_list,
+            cc=cc,
+            bcc=bcc,
+            **kwargs
+        )
+        message.attach_alternative(html, 'text/html')
+
+    else:
+        message = mail.EmailMessage(
+            subject or '',
+            plain or '',
+            from_email,
+            recipient_list,
+            cc=cc,
+            bcc=bcc,
+            **kwargs
+        )
+
+    for file in files or []:
+        message.attach_file(file)
+
+    return message
+
+
+def _render_mail(template_name, from_email, recipient_list,
+                 dictionary=None, context_instance=None,
+                 cc=None, bcc=None, files=None, fail_silently=False,
+                 html_to_plaintext=strip_tags,
+                 **kwargs):
+    """
+    Returns an EmailMessage instance, rendering the subject and body of the
+    email from a template.
+
+    For usage, see `send_templated_mail`.
+
+    Additionally, the following arguments are used:
+
+    `html_to_plaintext` - A function taking a single argument.  If an 'html'
+                          block is provided, but a 'plain' block is not, then
+                          this function will be used to auto-generate the
+                          plaintext of the email body from the html.
+                          May be set to `None` to disable this behaviour.
+    `**kwargs` - Remaining keyword arguments are passed to the EmailMessage
+                 on initialisation. (Eg. 'attachments', 'headers', etc...)
+    """
+    context_instance = context_instance or Context()
+    dictionary = dictionary or {}
+    template = loader.get_template(template_name)
+
+    context_instance.update(dictionary)
+    try:
+        subject = _render_block_node(template, 'subject', context_instance)
+        plain = _render_block_node(template, 'plain', context_instance)
+        html = _render_block_node(template, 'html', context_instance)
+    finally:
+        # Revert the context_instance to keep it in the same state.
+        context_instance.pop()
+
+    # Always strip newlines from subject.
+    if subject:
+        subject = ' '.join(subject.splitlines())
+
+    # Auto-generate plaintext portion of the email if required.
+    if plain is None and html and html_to_plaintext:
+        plain = html_to_plaintext(html)
+
+    message = _create_message(subject, plain, html,
+                              from_email, recipient_list, **kwargs)
+    return message
+
+
+def send_templated_mail(template_name, from_email, recipient_list,
+                        dictionary=None, context_instance=None,
+                        cc=None, bcc=None, files=None, fail_silently=False):
+    """
+    Sends an email, rendering the subject and body of the email from a
+    template.
+
+    The template should contain a block named 'subject', and either/both of a
+    'plain' and/or 'html' block.
+
+    * If only the 'plain' block exists, a plaintext email will be returned.
+    * If only the 'html' block exists, the plaintext component will be
+      automatically generated from the html, and a multipart email will be
+      returned.
+    * If both the 'plain' and 'html' blocks exist, a multipart email will be
+      returned.
+
+    Required arguments:
+
+    `template_name` - The template that should be used to render the email.
+    `from_email` - The sender's email address.
+    `recipient_list` - A list of reciepient's email addresses.
+
+    Optional arguments:
+
+    `dictionary` - The context dictionary used to render the template.
+                   By default, this is an empty dictionary.
+    `context_instance` - The Context instance used to render the template.
+                         By default, the template will be rendered with a
+                         Context instance (filled with values from dictionary).
+    `cc` - A list or tuple of recipient addresses used in the "Cc" header when
+           sending the email.
+    `bcc` - A list or tuple of addresses used in the "Bcc" header when sending
+            the email.
+    `files` - A list of file paths.  These files will be added as attachments
+              on the message.
+    ``fail_silently``: A boolean. If it's ``False``, ``send_templated_mail``
+                       will raise an ``smtplib.SMTPException`` on failure.
+    """
+    connection = mail.get_connection()
+    message = _render_mail(template_name, from_email, recipient_list,
+                           dictionary, context_instance,
+                           cc=cc, bcc=bcc, files=files,
+                           fail_silently=fail_silently)
+    connection.send_messages([message])

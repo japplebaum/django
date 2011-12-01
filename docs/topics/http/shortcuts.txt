@@ -215,6 +215,93 @@ will be returned::
         object = MyModel.objects.get(...)
         return redirect(object, permanent=True)
 
+``send_templated_mail``
+=======================
+
+.. function:: send_templated_mail(template_name, from_email, recipient_list[, dictionary=None][, context_instance=None][, cc=None][, bcc=None][, files=None][, fail_silently=False])
+
+   Sends a mail, rendering the subject and body of the email from a template.
+
+   The template should contain a block named 'subject', and either/both of a
+   'plain' and/or 'html' block.
+
+   * If only the 'plain' block exists, a plaintext email will be sent.
+
+   * If only the 'html' block exists, the plaintext component will be
+     automatically generated from the html, and a multipart email will be sent.
+
+   * If both the 'plain' and 'html' blocks exist, a multipart email will be
+     sent.
+
+.. admonition:: Note
+
+    If you do not include a 'plain' block in your email template, be aware of
+    how users viewing the email as plaintext will see the email.  In
+    particular, any links contained in the body text will have been rendered as
+    plaintext.
+
+Required arguments
+------------------
+
+``template_name``
+  The full name of the template to use.
+
+``from_email``
+   The sender's email address.
+
+``recipient_list``
+   A list of recipient's email addresses.
+
+Optional arguments
+------------------
+
+``dictionary``
+   The context dictionary used to render the template.
+   By default, this is an empty dictionary.
+
+``context_instance``
+    The context instance to render the template with. By default, the template
+    will be rendered with a :class:`~django.template.Context` instance (filled
+    with values from ``dictionary``).
+
+``cc``
+    A list or tuple of recipient addresses used in the "Cc" header when sending
+    the email.
+
+``bcc``
+    A list or tuple of addresses used in the "Bcc" header when sending the
+    email.
+
+``files``
+    A list of file paths.  These files will be added as attachments on the
+    message.
+
+``fail_silently``
+    A boolean.  If it's ``False``, ``send_templated_mail`` will raise an
+    ``smtplib.SMTPException`` on failure.
+
+Example
+-------
+
+The following example sends a MultiPart email, with HTML content rendered
+from a template, and plaintext content automatically generated from the HTML.
+
+``views.py``::
+
+   def my_view(request):
+       ...
+       recipients = [request.user.email]
+       send_templated_email('emails/welcome.html', 'noreply@example.com', recipients)
+
+``welcome.html``::
+
+   {% block subject %}Welcome to MySite{% endblock %}
+
+   {% block html %}
+   <h1>Hello, You!<h1>
+   <p>You've been signed up.<p>
+   {% endblock %}
+
 ``get_object_or_404``
 =====================
 
