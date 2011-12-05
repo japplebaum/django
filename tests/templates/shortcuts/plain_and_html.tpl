@@ -3,9 +3,9 @@
 {% endblock %}
 
 {% block plain %}
-	This is the plaintext block
+This is the plaintext block
 {% endblock %}
 
 {% block html %}
-	This is the html block
+<span> This is the html block </span>
 {% endblock %}
