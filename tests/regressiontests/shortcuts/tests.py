@@ -124,3 +124,48 @@ class SendTemplatedMailTest(TestCase):
         self.assertEqual(message.attachments, [])
         self.assertEqual(message.alternatives[0], 
            (u"<span>This is an html message</span>", "text/html"))
+           
+    def test_plain_and_html(self):
+        """
+        Tests an email with both html and plain
+	    """
+
+    	email_msg = shortcuts._render_mail("shortcuts/plain_and_html.tpl","person@example.com",
+    	["people@example.com"])
+    	self.assertEqual(email_msg.body,
+    	    u"This is the plaintext block")
+    	self.assertEqual(email_msg.alternatives,
+    	    [(u"<span> This is the html block </span>",'text/html')])
+
+    def test_create_message_plaintext(self):
+    	"""
+    	Tests if an email is created with plaintext only
+    	"""
+
+    	email_msg = shortcuts._create_message('test_subject', 'test_plain', None,
+        	"person@example.com", ["people@example.com"], None)
+
+    	self.assertEqual(email_msg.body, 'test_plain')
+    	self.assertEqual(email_msg.attachments, [])
+
+
+    def test_create_message_html(self):
+        """
+    	Tests if an email is created in html with specified fields
+        """
+    	email_msg = shortcuts._create_message('test_subject', None, '<span>test_html</span>',
+    	"person@example.com", ["people@example.com"], None)
+
+	self.assertEqual(email_msg.body, '')
+	self.assertEqual(email_msg.alternatives, [('<span>test_html</span>', 'text/html')])
+
+    def test_create_message_html_and_plain_text(self):
+
+	"""
+	Tests if an email is created in html and plaintext with specified fields
+	"""
+	email_msg = shortcuts._create_message('test_subject', 'test_plain', 'test_html',
+	"person@example.com", ["people@example.com"], None)
+
+	self.assertEqual(email_msg.body, 'test_plain')
+	self.assertEqual(email_msg.alternatives, [('test_html', 'text/html')])
